@@ -14,7 +14,7 @@ bullet_radius = 25
 bullet_speed =15
 player_radius = 50
 
-boom = 100
+boom = 400
 boom_thresh = 30
 
 fire_timer: float = 0
@@ -94,7 +94,7 @@ def ws_handler(ws, message):
           ws.send('vel0,0')
 
       else:
-        ws.send(f'fire{random.randint(-10, 10)}, {random.randint(-10, 10)}')
+        ws.send(f'fire{random.randint(-1000, 1000)}, {random.randint(-1000, 1000)}')
       
   if msg['type']=='sync_bullet':
     bullets = msg['info'][0]
