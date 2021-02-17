@@ -4,9 +4,6 @@ import random
 import json
 import _thread as thread
 import math
-import sympy
-from sympy import *
-from sympy.geometry import *
 
 dash_forsight = 10
 dash_thresh = 1
@@ -63,7 +60,7 @@ def check_incoming(bullets, x, y, px, py):
                 new_x += b['angle'][0]
                 new_y += b['angle'][1]
                 if math.dist((x, y), (new_x, new_y)) <= radius * dash_thresh:
-                    collide = true
+                    collide = True
                     break
 
             if collide:
