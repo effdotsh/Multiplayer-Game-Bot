@@ -24,12 +24,16 @@ y = 0
 px = 0
 py = 0
 id = ''
-url = 'ws://aispawn.herokuapp.com/ws'
+url = 'ws://nononojai.herokuapp.com/ws'
 # url = "ws://localhost:3000/ws"
 
 name = 'BotBoio'
 
 z = 0
+
+
+def set_boom(health):
+    return 100 + (400 - 4 * health)
 
 
 def random_dash(x, y, px, py):
@@ -124,6 +128,8 @@ def ws_handler(ws, message):
             if time.time() - fire_timer >= fire_rate:
                 fire(bx, by, px, py, players[other]['vel_x'], players[other]['vel_y'])
                 fire_timer = time.time()
+
+            boom = set_boom(players[this_player]['health'])
 
             if (math.dist((px, py), (bx, by)) > boom + boom_thresh):
                 ws.send(f'vel{px - bx},{py - by}')
