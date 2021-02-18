@@ -4,6 +4,11 @@ import random
 import json
 import _thread as thread
 import math
+import requests
+import json
+
+import os
+import sys
 
 dash_forsight = 10
 dash_thresh = 1
@@ -24,7 +29,7 @@ y = 0
 px = 0
 py = 0
 id = ''
-url = 'ws://nononojai.herokuapp.com/ws'
+url = 'ws://aispawn.herokuapp.com/ws'
 # url = "ws://localhost:3000/ws"
 
 name = 'BotBoio'
@@ -68,7 +73,6 @@ def check_incoming(bullets, x, y, px, py):
                     break
 
             if collide:
-                # print((collision))
                 random_dash(x, y, px, py)
 
 
@@ -150,21 +154,53 @@ def ws_handler(ws, message):
 
 def on_error(ws, error):
     print(error)
+    os.execl(sys.executable, sys.executable, *sys.argv)
 
 
 def on_open(ws):
+    def check_leave(*args):
+        while True:
+            time.sleep(1)
+            if (not should_join()):
+                os.execl(sys.executable, sys.executable, *sys.argv)
     def run(*args):
         while True:
             time.sleep(0.1)
-            try:
-                ws.send('sync')
-            except Exception as e:
-                print(e)
-                quit()
+            ws.send('sync')
+
+
+
 
     ws.send(f'name{name}')
     thread.start_new_thread(run, ())
+    thread.start_new_thread(check_leave, ())
 
+
+def should_join():
+    site = ''
+    while True:
+        try:
+            site = requests.get('https://aispawn.herokuapp.com/info', timeout=1)
+            break
+        except:
+            pass
+    decoded = json.loads(site.content.decode('utf8'))
+
+    num_players = 0
+    for p in decoded:
+        if not p['spectating'] and p['name'] != name:
+            num_players += 1
+
+    if num_players <= 1:
+        return True
+    else:
+        return False
+
+
+start_running = False
+while not start_running:
+    start_running = should_join()
+    time.sleep(1)
 
 ws = WebSocketApp(url, on_message=ws_handler, on_error=on_error)
 ws.on_open = on_open
