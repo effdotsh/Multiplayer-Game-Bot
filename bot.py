@@ -103,6 +103,8 @@ def ws_handler(ws, message):
     if msg['type'] == 'sync_player':
         this_player = msg['you_are']
         players = msg['info'][0]
+        if not check_join(players):
+            os.execl(sys.executable, sys.executable, *sys.argv)
 
         bx = players[this_player]['x']
         by = players[this_player]['y']
@@ -119,6 +121,7 @@ def ws_handler(ws, message):
         for p in filtered:
             if p['id'] != id and math.dist((p['x'], p['y']), (x, y)) < dist:
                 other_id = p['id']
+                dist = math.dist((p['x'], p['y']), (x, y))
 
         for p in players:
             if p['id'] == other_id:
@@ -128,22 +131,31 @@ def ws_handler(ws, message):
         px = players[other]['x']
         py = players[other]['y']
 
-        if (players[other]['living'] and other != this_player):
+        if players[other]['living'] and other != this_player:
             if time.time() - fire_timer >= fire_rate:
                 fire(bx, by, px, py, players[other]['vel_x'], players[other]['vel_y'])
                 fire_timer = time.time()
 
             boom = set_boom(players[this_player]['health'])
 
-            if (math.dist((px, py), (bx, by)) > boom + boom_thresh):
-                ws.send(f'vel{px - bx},{py - by}')
-            elif (math.dist((px, py), (bx, by)) < boom - boom_thresh):
-                ws.send(f'vel{bx - px},{by - py}')
-            else:
-                ws.send('vel0,0')
+            vel_x = 0
+            vel_y = 0
+            if math.dist((px, py), (bx, by)) > boom + boom_thresh:
+                # ws.send(f'vel{px - bx},{py - by}')
+                vel_x = px - bx
+                vel_y = py - by
+            elif math.dist((px, py), (bx, by)) < boom - boom_thresh:
+                # ws.send(f'vel{bx - px},{by - py}')
+                vel_x = bx - px
+                vel_y = by - py
+
+            vel = legalize_move(vel_x, vel_y)
+            ws.send(f'vel{vel[0]},{vel[1]}')
+
 
         else:
-            ws.send(f'vel{2144 / 2 - bx},{1047 / 2 - by}')
+            vel = legalize_move(2144 / 2 - bx, 1047 / 2 - by)
+            ws.send(f'vel{vel[0]},{vel[1]}')
 
             ws.send(f'fire{random.randint(-1000, 1000)}, {random.randint(-1000, 1000)}')
 
@@ -157,37 +169,33 @@ def on_error(ws, error):
     os.execl(sys.executable, sys.executable, *sys.argv)
 
 
+def legalize_move(vel_x, vel_y):
+    possible = [0, 1, -1]
+
+    correct = bind_vector(vel_x, vel_y)
+    vel = (0, 0)
+    # Turn direction into 8 directional
+    for dir_x in possible:
+        for dir_y in possible:
+            new = bind_vector(dir_x, dir_y)
+            if math.dist(new, correct) < math.dist(correct, vel):
+                vel = new
+    return vel
+
+
 def on_open(ws):
-    def check_leave(*args):
-        while True:
-            time.sleep(1)
-            if (not should_join()):
-                os.execl(sys.executable, sys.executable, *sys.argv)
     def run(*args):
         while True:
             time.sleep(0.1)
             ws.send('sync')
 
-
-
-
     ws.send(f'name{name}')
     thread.start_new_thread(run, ())
-    thread.start_new_thread(check_leave, ())
 
 
-def should_join():
-    site = ''
-    while True:
-        try:
-            site = requests.get('https://aispawn.herokuapp.com/info', timeout=1)
-            break
-        except:
-            pass
-    decoded = json.loads(site.content.decode('utf8'))
-
+def check_join(players):
     num_players = 0
-    for p in decoded:
+    for p in players:
         if not p['spectating'] and p['name'] != name:
             num_players += 1
 
@@ -195,6 +203,28 @@ def should_join():
         return True
     else:
         return False
+
+
+def should_join():
+    while True:
+        try:
+            site = requests.get('https://aispawn.herokuapp.com/info', timeout=1)
+            break
+        except:
+            pass
+    decoded = json.loads(site.content.decode('utf8'))
+    return check_join(decoded)
+
+
+def bind_vector(x, y, magnitude=99999999):
+    if x != 0 or y != 0:
+        scaler = magnitude / math.sqrt(pow(x, 2) + pow(y, 2))
+        x *= scaler
+        y *= scaler
+    else:
+        x = -magnitude if x <= -magnitude else (magnitude if x >= magnitude else x)
+        y = -magnitude if y <= -magnitude else (magnitude if y >= magnitude else y)
+    return x, y
 
 
 start_running = False
