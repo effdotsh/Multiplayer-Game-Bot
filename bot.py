@@ -212,7 +212,7 @@ def on_open(ws):
 def check_join(players):
     num_players = 0
     for p in players:
-        if not p['spectating'] and p['name'] != args.name:
+        if not p['spectating'] and p['name'] not in [args.name, '']:
             num_players += 1
 
     if args.min_players <= num_players < args.max_players:
