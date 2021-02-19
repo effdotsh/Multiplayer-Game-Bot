@@ -1,4 +1,6 @@
 from websocket import WebSocketApp
+import argparse
+
 import time
 import random
 import json
@@ -10,18 +12,31 @@ import json
 import os
 import sys
 
-dash_forsight = 10
-dash_thresh = 1
+parser = argparse.ArgumentParser()
+parser.add_argument('--dash_foresight', '-df', default=10,
+                    help='How many moves into the future the bot looks to dash (more for higher latency)', type=float)
+parser.add_argument('--dash_thresh', default=1,
+                    help='The amount of padding to give the collision area.', type=float)
+parser.add_argument('--max_players', '-p', default=2,
+                    help='How many players before bot leaves', type=int)
 
-fire_rate = 0.4
-bullet_radius = 25
-bullet_speed = 15
-player_radius = 50
+parser.add_argument('--fire_rate', '-f', default=0.4, type=float)
 
-radius = (player_radius + bullet_radius) * dash_thresh
+parser.add_argument('--bullet_speed', '-b', default=15, type=float)
+parser.add_argument('--bullet_radius', '-rb', default=25, type=float)
+parser.add_argument('--player_radius', '-rp', default=50, type=float)
 
-boom = 200
-boom_thresh = 20
+parser.add_argument('--boom_thresh', '-bt', default=20, type=float)
+parser.add_argument('--boom_scaler', '-bs', default=4, type=float)
+parser.add_argument('--boom_base', '-bb', default=100, type=float)
+
+parser.add_argument('--name', '-n', default='BotBoio', type=str)
+
+parser.add_argument('--url', '-u', default='localhost:3000', type=str)
+
+args = parser.parse_args()
+
+radius = (args.player_radius + args.bullet_radius) * args.dash_thresh
 
 fire_timer: float = 0
 x = 0
@@ -29,24 +44,19 @@ y = 0
 px = 0
 py = 0
 id = ''
-url = 'ws://aispawn.herokuapp.com/ws'
-# url = "ws://localhost:3000/ws"
+# url = 'ws://aispawn.herokuapp.com/ws'
 
-name = 'BotBoio'
 
 z = 0
 
 
 def set_boom(health):
-    return 100 + (400 - 4 * health)
+    return args.boom_base + (args.boom_base - health) * args.boom_scaler
 
 
 def random_dash(x, y, px, py):
     connecting_slope = (y - py) / (x - px)
     slope = -1 / connecting_slope
-
-    orbit_x = x + (px - x) / 7
-    orbit_y = y + (py + y) / 7
 
     mid_point = ((x + px) / 2)
     diff = abs(x - px)
@@ -65,10 +75,10 @@ def check_incoming(bullets, x, y, px, py):
             new_y = b['y']
 
             collide = False
-            for i in range(dash_forsight):
+            for i in range(args.dash_foresight):
                 new_x += b['angle'][0]
                 new_y += b['angle'][1]
-                if math.dist((x, y), (new_x, new_y)) <= radius * dash_thresh:
+                if math.dist((x, y), (new_x, new_y)) <= radius * args.dash_thresh:
                     collide = True
                     break
 
@@ -78,7 +88,7 @@ def check_incoming(bullets, x, y, px, py):
 
 def fire(x, y, px, py, vel_x, vel_y):
     dist = math.dist((x, y), (px, py))
-    travel_time = dist / bullet_speed
+    travel_time = dist / args.bullet_speed
     target_x = px + vel_x * travel_time
     target_y = py + vel_y * travel_time
     ws.send(f'fire{target_x - x}, {target_y - y}')
@@ -132,7 +142,7 @@ def ws_handler(ws, message):
         py = players[other]['y']
 
         if players[other]['living'] and other != this_player:
-            if time.time() - fire_timer >= fire_rate:
+            if time.time() - fire_timer >= args.fire_rate:
                 fire(bx, by, px, py, players[other]['vel_x'], players[other]['vel_y'])
                 fire_timer = time.time()
 
@@ -140,11 +150,11 @@ def ws_handler(ws, message):
 
             vel_x = 0
             vel_y = 0
-            if math.dist((px, py), (bx, by)) > boom + boom_thresh:
+            if math.dist((px, py), (bx, by)) > boom + args.boom_thresh:
                 # ws.send(f'vel{px - bx},{py - by}')
                 vel_x = px - bx
                 vel_y = py - by
-            elif math.dist((px, py), (bx, by)) < boom - boom_thresh:
+            elif math.dist((px, py), (bx, by)) < boom - args.boom_thresh:
                 # ws.send(f'vel{bx - px},{by - py}')
                 vel_x = bx - px
                 vel_y = by - py
@@ -189,17 +199,17 @@ def on_open(ws):
             time.sleep(0.1)
             ws.send('sync')
 
-    ws.send(f'name{name}')
+    ws.send(f'name{args.name}')
     thread.start_new_thread(run, ())
 
 
 def check_join(players):
     num_players = 0
     for p in players:
-        if not p['spectating'] and p['name'] != name:
+        if not p['spectating'] and p['name'] != args.name:
             num_players += 1
 
-    if num_players <= 1:
+    if num_players < args.max_players:
         return True
     else:
         return False
@@ -208,7 +218,7 @@ def check_join(players):
 def should_join():
     while True:
         try:
-            site = requests.get('https://aispawn.herokuapp.com/info', timeout=1)
+            site = requests.get(f'https://{args.url}/info', timeout=1)
             break
         except:
             pass
@@ -232,6 +242,6 @@ while not start_running:
     start_running = should_join()
     time.sleep(1)
 
-ws = WebSocketApp(url, on_message=ws_handler, on_error=on_error)
+ws = WebSocketApp(f'ws://{args.url}/ws', on_message=ws_handler, on_error=on_error)
 ws.on_open = on_open
 ws.run_forever()
