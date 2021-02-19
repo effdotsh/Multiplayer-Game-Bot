@@ -19,6 +19,8 @@ parser.add_argument('--dash_thresh', default=1,
                     help='The amount of padding to give the collision area.', type=float)
 parser.add_argument('--max_players', '-p', default=2,
                     help='How many players before bot leaves', type=int)
+parser.add_argument('--min_players', default=0, type=int)
+
 
 parser.add_argument('--fire_rate', '-f', default=0.4, type=float)
 
@@ -33,6 +35,9 @@ parser.add_argument('--boom_base', '-bb', default=100, type=float)
 parser.add_argument('--name', '-n', default='BotBoio', type=str)
 
 parser.add_argument('--url', '-u', default='localhost:3000', type=str)
+parser.add_argument('--poll_time', '-pt', default=3, type=int)
+
+
 
 args = parser.parse_args()
 
@@ -114,6 +119,7 @@ def ws_handler(ws, message):
         this_player = msg['you_are']
         players = msg['info'][0]
         if not check_join(players):
+            ws.close()
             os.execl(sys.executable, sys.executable, *sys.argv)
 
         bx = players[this_player]['x']
@@ -209,7 +215,7 @@ def check_join(players):
         if not p['spectating'] and p['name'] != args.name:
             num_players += 1
 
-    if num_players < args.max_players:
+    if args.min_players <= num_players < args.max_players:
         return True
     else:
         return False
@@ -237,10 +243,11 @@ def bind_vector(x, y, magnitude=99999999):
     return x, y
 
 
-start_running = False
+start_running = should_join()
 while not start_running:
+    time.sleep(args.poll_time)
     start_running = should_join()
-    time.sleep(1)
+
 
 ws = WebSocketApp(f'ws://{args.url}/ws', on_message=ws_handler, on_error=on_error)
 ws.on_open = on_open
