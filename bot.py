@@ -108,7 +108,7 @@ def fire(x, y, px, py, vel_x, vel_y):
     travel_time = dist / args.bullet_speed
     target_x = px + vel_x * travel_time
     target_y = py + vel_y * travel_time
-    # ws.send(f'fire{target_x - x}, {target_y - y}')
+    ws.send(f'fire{target_x - x}, {target_y - y}')
 
 
 def filter_players(player):
@@ -179,9 +179,9 @@ def ws_handler(ws, message):
                 vel_x = bx - px
                 vel_y = by - py
 
-            # vel = legalize_move(vel_x, vel_y)
-            # if not dodging:
-            #     ws.send(f'vel{vel[0]},{vel[1]}')
+            vel = legalize_move(vel_x, vel_y)
+            if not dodging:
+                ws.send(f'vel{vel[0]},{vel[1]}')
 
 
         else:
