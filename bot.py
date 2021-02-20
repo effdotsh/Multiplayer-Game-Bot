@@ -13,14 +13,14 @@ import os
 import sys
 
 parser = argparse.ArgumentParser()
-parser.add_argument('--dash_foresight', '-df', default=10,
+parser.add_argument('--dash_foresight', '-df', default=15,
                     help='How many moves into the future the bot looks to dash (more for higher latency)', type=float)
+parser.add_argument('--dodge_foresight', '-d', default=30, type=float)
 parser.add_argument('--dash_thresh', default=1,
                     help='The amount of padding to give the collision area.', type=float)
 parser.add_argument('--max_players', '-p', default=2,
                     help='How many players before bot leaves', type=int)
 parser.add_argument('--min_players', default=0, type=int)
-
 
 parser.add_argument('--fire_rate', '-f', default=0.4, type=float)
 
@@ -33,11 +33,10 @@ parser.add_argument('--boom_scaler', '-bs', default=4, type=float)
 parser.add_argument('--boom_base', '-bb', default=100, type=float)
 
 parser.add_argument('--name', '-n', default='BotBoio', type=str)
+parser.add_argument('--reset_score', '-rs', default='100', type=float)
 
 parser.add_argument('--url', '-u', default='localhost:3000', type=str)
 parser.add_argument('--poll_time', '-pt', default=3, type=int)
-
-
 
 args = parser.parse_args()
 
@@ -49,11 +48,11 @@ y = 0
 px = 0
 py = 0
 id = ''
-# url = 'ws://aispawn.herokuapp.com/ws'
-
 
 z = 0
 
+dodging = False
+dashing = False
 
 def set_boom(health):
     return args.boom_base + (args.boom_base - health) * args.boom_scaler
@@ -69,26 +68,39 @@ def random_dash(x, y, px, py):
 
     dash_y = slope * (dash_x - mid_point) + (py + y) / 2
 
-    ws.send(f'vel{dash_x - x},{dash_y - y}')
-    ws.send('dash')
+    return dash_x - x, dash_y - y
 
 
 def check_incoming(bullets, x, y, px, py):
+    global dodging
+    global dashing
+
     for b in bullets:
         if b['fired_by'] != id and 0 < b['x'] < 3000 and 0 < b['y'] < 3000 and b != bullets[0]:
             new_x = b['x']
             new_y = b['y']
 
             collide = False
-            for i in range(args.dash_foresight):
+            dashing = False
+            for i in range(args.dodge_foresight):
                 new_x += b['angle'][0]
                 new_y += b['angle'][1]
                 if math.dist((x, y), (new_x, new_y)) <= radius * args.dash_thresh:
                     collide = True
+                    if i < args.dash_foresight:
+                        dashing = True
                     break
 
             if collide:
-                random_dash(x, y, px, py)
+                angle = random_dash(x, y, px, py)
+                if not dodging:
+                    dodging = True
+                    ws.send(f'vel{angle[0]},{angle[1]}')
+                if dashing:
+                    ws.send('dash')
+            else:
+                dodging = False
+                dashing = False
 
 
 def fire(x, y, px, py, vel_x, vel_y):
@@ -96,7 +108,7 @@ def fire(x, y, px, py, vel_x, vel_y):
     travel_time = dist / args.bullet_speed
     target_x = px + vel_x * travel_time
     target_y = py + vel_y * travel_time
-    ws.send(f'fire{target_x - x}, {target_y - y}')
+    # ws.send(f'fire{target_x - x}, {target_y - y}')
 
 
 def filter_players(player):
@@ -147,6 +159,10 @@ def ws_handler(ws, message):
         px = players[other]['x']
         py = players[other]['y']
 
+        if args.reset_score > 0 and players[this_player]['score'] >= args.reset_score:
+            ws.close()
+            os.execl(sys.executable, sys.executable, *sys.argv)
+
         if players[other]['living'] and other != this_player:
             if time.time() - fire_timer >= args.fire_rate:
                 fire(bx, by, px, py, players[other]['vel_x'], players[other]['vel_y'])
@@ -157,16 +173,15 @@ def ws_handler(ws, message):
             vel_x = 0
             vel_y = 0
             if math.dist((px, py), (bx, by)) > boom + args.boom_thresh:
-                # ws.send(f'vel{px - bx},{py - by}')
                 vel_x = px - bx
                 vel_y = py - by
             elif math.dist((px, py), (bx, by)) < boom - args.boom_thresh:
-                # ws.send(f'vel{bx - px},{by - py}')
                 vel_x = bx - px
                 vel_y = by - py
 
-            vel = legalize_move(vel_x, vel_y)
-            ws.send(f'vel{vel[0]},{vel[1]}')
+            # vel = legalize_move(vel_x, vel_y)
+            # if not dodging:
+            #     ws.send(f'vel{vel[0]},{vel[1]}')
 
 
         else:
@@ -247,7 +262,6 @@ start_running = should_join()
 while not start_running:
     time.sleep(args.poll_time)
     start_running = should_join()
-
 
 ws = WebSocketApp(f'ws://{args.url}/ws', on_message=ws_handler, on_error=on_error)
 ws.on_open = on_open
