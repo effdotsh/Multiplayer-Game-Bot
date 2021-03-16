@@ -54,6 +54,7 @@ z = 0
 dodging = False
 dashing = False
 
+
 def set_boom(health):
     return args.boom_base + (args.boom_base - health) * args.boom_scaler
 
@@ -127,9 +128,14 @@ def ws_handler(ws, message):
     global id
 
     msg = json.loads(message)
+
     if msg['type'] == 'sync_player':
         this_player = msg['you_are']
         players = msg['info'][0]
+
+        if players[this_player]['spectating']:
+            os.execl(sys.executable, sys.executable, *sys.argv)
+
         if not check_join(players):
             ws.close()
             os.execl(sys.executable, sys.executable, *sys.argv)
@@ -159,7 +165,7 @@ def ws_handler(ws, message):
         px = players[other]['x']
         py = players[other]['y']
 
-        if args.reset_score > 0 and players[this_player]['score'] >= args.reset_score:
+        if 0 < args.reset_score <= players[this_player]['score']:
             ws.close()
             os.execl(sys.executable, sys.executable, *sys.argv)
 
@@ -217,7 +223,7 @@ def legalize_move(vel_x, vel_y):
 def on_open(ws):
     def run(*args):
         while True:
-            time.sleep(0.1)
+            time.sleep(0.2)
             ws.send('sync')
 
     ws.send(f'name{args.name}')
@@ -239,7 +245,7 @@ def check_join(players):
 def should_join():
     while True:
         try:
-            site = requests.get(f'https://{args.url}/info', timeout=1)
+            site = requests.get(f'http://{args.url}/info', timeout=1)
             break
         except:
             pass
